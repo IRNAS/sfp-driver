@@ -28,8 +28,6 @@ struct sfp_diagnostics_item {
   float tx_bias;
   float tx_power;
   float rx_power;
-  float laser_temperature;
-  float tec;
 };
 
 struct sfp_diagnostics {

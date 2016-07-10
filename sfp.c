@@ -170,8 +170,6 @@ int sfp_update_module_diagnostics_item(struct sfp_diagnostics_item *item, uint8_
   item->tx_bias = convert_number(&buffer[2 * stride], 500, 0);
   item->tx_power = convert_number(&buffer[3 * stride], 10000, 0);
   item->rx_power = convert_number(&buffer[4 * stride], 10000, 0);
-  item->laser_temperature = convert_number(&buffer[5 * stride], 256, 1);
-  item->tec = convert_number(&buffer[6 * stride], 10, 1);
   return 0;
 }
 

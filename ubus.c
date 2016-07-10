@@ -63,8 +63,6 @@ static inline void blobmsg_add_sfp_module_diagnostics_item(struct blob_buf *buff
   blobmsg_add_float(buffer, "tx_bias", item->tx_bias);
   blobmsg_add_float(buffer, "tx_power", item->tx_power);
   blobmsg_add_float(buffer, "rx_power", item->rx_power);
-  blobmsg_add_float(buffer, "laser_temperature", item->laser_temperature);
-  blobmsg_add_float(buffer, "tec", item->tec);
   blobmsg_close_table(buffer, c);
 }
 
