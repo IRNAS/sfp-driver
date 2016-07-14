@@ -86,6 +86,8 @@ static int ubus_get_modules(struct ubus_context *ctx, struct ubus_object *obj,
 
   blobmsg_parse(sfp_module_policy, __SFP_D_MAX, tb, blob_data(msg), blob_len(msg));
 
+  blob_buf_init(&reply_buf, 0);
+
   if (tb[SFP_D_MODULE]) {
     // Filter to a specific module.
     module = avl_find_element(sfp_get_modules(), blobmsg_data(tb[SFP_D_MODULE]), module, avl);
@@ -103,8 +105,6 @@ static int ubus_get_modules(struct ubus_context *ctx, struct ubus_object *obj,
     blobmsg_close_table(&reply_buf, c);
   } else {
     // Iterate through all modules.
-    blob_buf_init(&reply_buf, 0);
-
     avl_for_each_element(sfp_get_modules(), module, avl) {
       c = blobmsg_open_table(&reply_buf, module->serial_number);
 
