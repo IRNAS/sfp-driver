@@ -91,8 +91,9 @@ static int ubus_get_modules(struct ubus_context *ctx, struct ubus_object *obj,
   if (tb[SFP_D_MODULE]) {
     // Filter to a specific module.
     module = avl_find_element(sfp_get_modules(), blobmsg_data(tb[SFP_D_MODULE]), module, avl);
-    if (!module)
+    if (!module) {
       return UBUS_STATUS_NOT_FOUND;
+    }
 
     c = blobmsg_open_table(&reply_buf, module->serial_number);
 
@@ -123,9 +124,39 @@ static int ubus_get_modules(struct ubus_context *ctx, struct ubus_object *obj,
   return UBUS_STATUS_OK;
 }
 
+static int ubus_get_vendor_specific_data(struct ubus_context *ctx, struct ubus_object *obj,
+                                         struct ubus_request_data *req, const char *method,
+                                         struct blob_attr *msg)
+{
+  struct blob_attr *tb[__SFP_D_MAX];
+  struct sfp_module *module;
+
+  blobmsg_parse(sfp_module_policy, __SFP_D_MAX, tb, blob_data(msg), blob_len(msg));
+
+  blob_buf_init(&reply_buf, 0);
+
+  if (!tb[SFP_D_MODULE]) {
+    return UBUS_STATUS_INVALID_ARGUMENT;
+  }
+
+  // Filter to a specific module.
+  module = avl_find_element(sfp_get_modules(), blobmsg_data(tb[SFP_D_MODULE]), module, avl);
+  if (!module) {
+    return UBUS_STATUS_NOT_FOUND;
+  }
+
+  blobmsg_add_field(&reply_buf, BLOBMSG_TYPE_UNSPEC, "vendor_specific",
+    module->vendor_specific, module->vendor_specific_length);
+
+  ubus_send_reply(ctx, req, reply_buf.head);
+
+  return UBUS_STATUS_OK;
+}
+
 static const struct ubus_method sfp_methods[] = {
   UBUS_METHOD("get_modules", ubus_get_modules, sfp_module_policy),
   UBUS_METHOD("get_diagnostics", ubus_get_modules, sfp_module_policy),
+  UBUS_METHOD("get_vendor_specific_data", ubus_get_vendor_specific_data, sfp_module_policy),
 };
 
 static struct ubus_object_type sfp_type =

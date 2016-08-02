@@ -49,6 +49,9 @@ struct sfp_module {
   unsigned int bitrate;
   unsigned int wavelength;
 
+  uint8_t *vendor_specific;
+  size_t vendor_specific_length;
+
   struct sfp_diagnostics diagnostics;
 
   // Module registry AVL tree node.

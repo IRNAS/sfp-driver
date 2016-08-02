@@ -46,6 +46,9 @@
 #define SFP_WAVELENGTH_OFFSET 60
 #define SFP_CHECKSUM_OFFSET 63
 
+#define SFP_VENDOR_SPECIFIC_OFFSET 96
+#define SFP_VENDOR_SPECIFIC_LENGTH 32
+
 #define SFP_DIAG_VALUE_OFFSET 96
 #define SFP_DIAG_VALUE_STRIDE 2
 
@@ -68,6 +71,7 @@ int sfp_init_module(const char *bus);
 void sfp_free_module(struct sfp_module *module);
 int sfp_update_module_diagnostics_item(struct sfp_diagnostics_item *item, uint8_t *buffer, size_t stride);
 void sfp_copy_string(char **destination, uint8_t *buffer, size_t offset, size_t length);
+void sfp_copy_data(uint8_t **destination, uint8_t *buffer, size_t offset, size_t length);
 int i2c_open(const char *bus, int address);
 int i2c_close(int i2c_bus);
 int i2c_read_data(int i2c_bus, uint8_t *data, size_t size);
@@ -122,6 +126,9 @@ int sfp_init_module(const char *bus)
   module->bitrate = (unsigned int) buffer[SFP_BITRATE_OFFSET] * 100;
   module->wavelength = (unsigned int) buffer[SFP_WAVELENGTH_OFFSET] * 256 + buffer[SFP_WAVELENGTH_OFFSET + 1];
 
+  sfp_copy_data(&module->vendor_specific, buffer, SFP_VENDOR_SPECIFIC_OFFSET, SFP_VENDOR_SPECIFIC_LENGTH);
+  module->vendor_specific_length = SFP_VENDOR_SPECIFIC_LENGTH;
+
   // Insert discovered module into AVL tree.
   module->avl.key = module->serial_number;
   if (avl_insert(&module_registry, &module->avl) != 0) {
@@ -151,6 +158,7 @@ void sfp_free_module(struct sfp_module *module)
   free(module->bus);
   free(module->manufacturer);
   free(module->serial_number);
+  free(module->vendor_specific);
   free(module);
 }
 
@@ -200,6 +208,12 @@ void sfp_copy_string(char **destination, uint8_t *buffer, size_t offset, size_t 
   memcpy(*destination, buffer + offset, length);
   (*destination)[length] = 0;
   trim(*destination);
+}
+
+void sfp_copy_data(uint8_t **destination, uint8_t *buffer, size_t offset, size_t length)
+{
+  *destination = (uint8_t*) malloc(length);
+  memcpy(*destination, buffer + offset, length);
 }
 
 int i2c_open(const char *bus, int address)
