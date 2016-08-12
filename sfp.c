@@ -20,14 +20,17 @@
 #include "util.h"
 
 #include <libubox/avl-cmp.h>
+#include <libubox/uloop.h>
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <syslog.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
+#define SFP_I2C_PROBE_BUS_MAX 5
 #define SFP_I2C_INFO_ADDRESS 0x50
 #define SFP_I2C_DIAG_ADDRESS 0x51
 
@@ -66,7 +69,10 @@
 
 // An AVL tree containing all the registered SFP modules.
 static struct avl_tree module_registry;
+// Timer for periodic SFP module autodiscovery.
+struct uloop_timeout timer_autodiscovery;
 
+void sfp_module_autodiscovery(struct uloop_timeout *timeout);
 int sfp_init_module(const char *bus);
 void sfp_free_module(struct sfp_module *module);
 int sfp_update_module_diagnostics_item(struct sfp_diagnostics_item *item, uint8_t *buffer, size_t stride);
@@ -83,8 +89,11 @@ int sfp_init(struct uci_context *uci)
   // Initialize the module registry.
   avl_init(&module_registry, avl_strcmp, false, NULL);
 
-  // TODO: Load module configuration from UCI or do autodiscovery?
-  return sfp_init_module("/dev/i2c-0");
+  // Initialize timers.
+  timer_autodiscovery.cb = sfp_module_autodiscovery;
+  sfp_module_autodiscovery(&timer_autodiscovery);
+
+  return 0;
 }
 
 struct avl_tree *sfp_get_modules()
@@ -92,11 +101,34 @@ struct avl_tree *sfp_get_modules()
   return &module_registry;
 }
 
+void sfp_module_autodiscovery(struct uloop_timeout *timeout)
+{
+  // Attempt to autodiscover SFP modules on all I2C buses.
+  for (size_t bus = 0; bus < SFP_I2C_PROBE_BUS_MAX; bus++) {
+    char bus_name[64];
+    struct sfp_module *module;
+    snprintf(bus_name, sizeof(bus_name), "/dev/i2c-%u", bus);
+
+    // Skip bus if a module has already been discovered on it.
+    int exists = 0;
+    avl_for_each_element(&module_registry, module, avl) {
+      if (strcmp(module->bus, bus_name) == 0) {
+        exists = 1;
+        break;
+      }
+    }
+
+    if (!exists) {
+      sfp_init_module(bus_name);
+    }
+  }
+
+  uloop_timeout_set(timeout, 10000);
+}
+
 int sfp_init_module(const char *bus)
 {
   int result = 0;
-  syslog(LOG_INFO, "Initializing SFP module on bus '%s'.", bus);
-
   int i2c_bus = i2c_open(bus, SFP_I2C_INFO_ADDRESS);
   if (i2c_bus < 0) {
     return -1;
