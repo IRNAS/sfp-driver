@@ -49,7 +49,7 @@ static inline void blobmsg_add_sfp_module_info(struct blob_buf *buffer, struct s
 static inline void blobmsg_add_float(struct blob_buf *buffer, const char *name, float value)
 {
   char tmp[64];
-  snprintf(tmp, sizeof(tmp), "%.2f", value);
+  snprintf(tmp, sizeof(tmp), "%.4f", value);
   blobmsg_add_string(buffer, name, tmp);
 }
 
