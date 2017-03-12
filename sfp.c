@@ -104,7 +104,7 @@ struct avl_tree *sfp_get_modules()
 void sfp_module_autodiscovery(struct uloop_timeout *timeout)
 {
   // Attempt to autodiscover SFP modules on all I2C buses.
-  for (size_t bus = 0; bus < SFP_I2C_PROBE_BUS_MAX; bus++) {
+  for (unsigned int bus = 0; bus < SFP_I2C_PROBE_BUS_MAX; bus++) {
     char bus_name[64];
     struct sfp_module *module;
     snprintf(bus_name, sizeof(bus_name), "/dev/i2c-%u", bus);
@@ -267,11 +267,16 @@ int i2c_read_data(int i2c_bus, uint8_t *data, size_t size)
 {
   char buffer[1] = {0x00};
 
-  write(i2c_bus, buffer, 1);
+  if (write(i2c_bus, buffer, 1) != 1) {
+    return 0;
+  }
 
   size_t bytes = 0;
   for (; bytes <= 255 && bytes < size; bytes++){
-    read(i2c_bus, buffer, 1);
+    if (read(i2c_bus, buffer, 1) != 1) {
+      break;
+    }
+
     data[bytes] = buffer[0];
   }
 
