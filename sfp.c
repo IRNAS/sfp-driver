@@ -135,7 +135,10 @@ int sfp_init_module(const char *bus)
   }
 
   uint8_t buffer[256];
-  i2c_read_data(i2c_bus, buffer, sizeof(buffer));
+  if (i2c_read_data(i2c_bus, buffer, sizeof(buffer)) <= 0) {
+    i2c_close(i2c_bus);
+    return -1;
+  }
 
   // Verify checksum.
   uint8_t checksum = 0;
@@ -222,7 +225,11 @@ int sfp_update_module_diagnostics(struct sfp_module *module)
   }
 
   uint8_t buffer[256];
-  i2c_read_data(i2c_bus, buffer, sizeof(buffer));
+  if (i2c_read_data(i2c_bus, buffer, sizeof(buffer)) <= 0) {
+    syslog(LOG_ERR, "Failed to read diagnostic data from module on bus '%s'.", module->bus);
+    i2c_close(i2c_bus);
+    return -1;
+  }
 
   sfp_update_module_diagnostics_item(&module->diagnostics.value, &buffer[SFP_DIAG_VALUE_OFFSET], SFP_DIAG_VALUE_STRIDE);
   sfp_update_module_diagnostics_item(&module->diagnostics.error_upper, &buffer[SFP_DIAG_ERROR_UP_OFFSET], SFP_DIAG_ERROR_UP_STRIDE);
