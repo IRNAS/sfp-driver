@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 
 #define SFP_I2C_PROBE_BUS_MAX 5
 #define SFP_I2C_INFO_ADDRESS 0x50
@@ -71,11 +72,17 @@
 static struct avl_tree module_registry;
 // Timer for periodic SFP module autodiscovery.
 struct uloop_timeout timer_autodiscovery;
+// Timer for SFP module diagnostic updates.
+struct uloop_timeout timer_update_diagnostics;
 
 void sfp_module_autodiscovery(struct uloop_timeout *timeout);
+void sfp_module_diagnostics(struct uloop_timeout *timeout);
 int sfp_init_module(const char *bus);
 void sfp_free_module(struct sfp_module *module);
+int sfp_update_module_diagnostics(struct sfp_module *module);
 int sfp_update_module_diagnostics_item(struct sfp_diagnostics_item *item, uint8_t *buffer, size_t stride);
+void sfp_update_module_statistics_item(struct sfp_statistics_item *item, float value);
+void sfp_compute_module_statistics_item(struct sfp_statistics_item *item);
 void sfp_copy_string(char **destination, uint8_t *buffer, size_t offset, size_t length);
 void sfp_copy_data(uint8_t **destination, uint8_t *buffer, size_t offset, size_t length);
 int i2c_open(const char *bus, int address);
@@ -92,6 +99,9 @@ int sfp_init(struct uci_context *uci)
   // Initialize timers.
   timer_autodiscovery.cb = sfp_module_autodiscovery;
   sfp_module_autodiscovery(&timer_autodiscovery);
+
+  timer_update_diagnostics.cb = sfp_module_diagnostics;
+  sfp_module_diagnostics(&timer_update_diagnostics);
 
   return 0;
 }
@@ -123,7 +133,17 @@ void sfp_module_autodiscovery(struct uloop_timeout *timeout)
     }
   }
 
-  uloop_timeout_set(timeout, 10000);
+  uloop_timeout_set(timeout, SFP_AUTODISCOVERY_INTERVAL);
+}
+
+void sfp_module_diagnostics(struct uloop_timeout *timeout)
+{
+  struct sfp_module *module;
+  avl_for_each_element(&module_registry, module, avl) {
+    sfp_update_module_diagnostics(module);
+  }
+
+  uloop_timeout_set(timeout, SFP_UPDATE_INTERVAL);
 }
 
 int sfp_init_module(const char *bus)
@@ -152,6 +172,7 @@ int sfp_init_module(const char *bus)
   }
 
   struct sfp_module *module = (struct sfp_module*) malloc(sizeof(struct sfp_module));
+  memset(module, 0, sizeof(struct sfp_module));
   module->bus = strdup(bus);
   sfp_copy_string(&module->manufacturer, buffer, SFP_MANUFACTURER_OFFSET, SFP_MANUFACTURER_LENGTH);
   sfp_copy_string(&module->revision, buffer, SFP_REVISION_OFFSET, SFP_REVISION_LENGTH);
@@ -216,6 +237,45 @@ int sfp_update_module_diagnostics_item(struct sfp_diagnostics_item *item, uint8_
   return 0;
 }
 
+void sfp_update_module_statistics_item(struct sfp_statistics_item *item, float value)
+{
+  item->sum -= item->buffer[item->index];
+  item->buffer[item->index] = value;
+  item->sum += value;
+
+  if (item->samples < SFP_STATISTICS_BUFFER_SIZE) {
+    item->samples++;
+  }
+  item->index = (item->index + 1) % SFP_STATISTICS_BUFFER_SIZE;
+
+  item->average = item->sum / (float) item->samples;
+
+  // Invalidate statistics computed on-demand.
+  item->variance = NAN;
+  item->minimum = INFINITY;
+  item->maximum = -INFINITY;
+}
+
+void sfp_compute_module_statistics_item(struct sfp_statistics_item *item)
+{
+  item->variance = 0;
+  item->minimum = INFINITY;
+  item->maximum = -INFINITY;
+
+  for (size_t index = 0; index < item->samples; index++) {
+    float value = item->buffer[index];
+    if (value > item->maximum) {
+      item->maximum = value;
+    }
+    if (value < item->minimum) {
+      item->minimum = value;
+    }
+    item->variance += (value - item->average) * (value - item->average);
+  }
+
+  item->variance /= (float) item->samples;
+}
+
 int sfp_update_module_diagnostics(struct sfp_module *module)
 {
   int i2c_bus = i2c_open(module->bus, SFP_I2C_DIAG_ADDRESS);
@@ -237,7 +297,25 @@ int sfp_update_module_diagnostics(struct sfp_module *module)
   sfp_update_module_diagnostics_item(&module->diagnostics.warning_upper, &buffer[SFP_DIAG_WARNING_UP_OFFSET], SFP_DIAG_WARNING_UP_STRIDE);
   sfp_update_module_diagnostics_item(&module->diagnostics.warning_lower, &buffer[SFP_DIAG_WARNING_LO_OFFSET], SFP_DIAG_WARNING_LO_STRIDE);
 
+  // Update running statistics.
+  struct sfp_diagnostics_item *value = &module->diagnostics.value;
+  sfp_update_module_statistics_item(&module->statistics.temperature, value->temperature);
+  sfp_update_module_statistics_item(&module->statistics.vcc, value->vcc);
+  sfp_update_module_statistics_item(&module->statistics.tx_bias, value->tx_bias);
+  sfp_update_module_statistics_item(&module->statistics.tx_power, value->tx_power);
+  sfp_update_module_statistics_item(&module->statistics.rx_power, value->rx_power);
+
   i2c_close(i2c_bus);
+  return 0;
+}
+
+int sfp_update_module_statistics(struct sfp_module *module)
+{
+  sfp_compute_module_statistics_item(&module->statistics.temperature);
+  sfp_compute_module_statistics_item(&module->statistics.vcc);
+  sfp_compute_module_statistics_item(&module->statistics.tx_bias);
+  sfp_compute_module_statistics_item(&module->statistics.tx_power);
+  sfp_compute_module_statistics_item(&module->statistics.rx_power);
   return 0;
 }
 

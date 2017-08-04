@@ -66,14 +66,36 @@ static inline void blobmsg_add_sfp_module_diagnostics_item(struct blob_buf *buff
   blobmsg_close_table(buffer, c);
 }
 
+static inline void blobmsg_add_sfp_module_statistics_item(struct blob_buf *buffer,
+                                                          const char *name,
+                                                          struct sfp_statistics_item *item)
+{
+  void *c = blobmsg_open_table(buffer, name);
+  blobmsg_add_float(buffer, "average", item->average);
+  blobmsg_add_u32(buffer, "count", item->samples);
+  blobmsg_add_float(buffer, "variance", item->variance);
+  blobmsg_add_float(buffer, "minimum", item->minimum);
+  blobmsg_add_float(buffer, "maximum", item->maximum);
+  blobmsg_close_table(buffer, c);
+}
+
 static inline void blobmsg_add_sfp_module_diagnostics(struct blob_buf *buffer, struct sfp_module *module)
 {
-  sfp_update_module_diagnostics(module);
   blobmsg_add_sfp_module_diagnostics_item(buffer, "value", &module->diagnostics.value);
   blobmsg_add_sfp_module_diagnostics_item(buffer, "error_upper", &module->diagnostics.error_upper);
   blobmsg_add_sfp_module_diagnostics_item(buffer, "error_lower", &module->diagnostics.error_lower);
   blobmsg_add_sfp_module_diagnostics_item(buffer, "warning_upper", &module->diagnostics.warning_upper);
   blobmsg_add_sfp_module_diagnostics_item(buffer, "warning_lower", &module->diagnostics.warning_lower);
+}
+
+static inline void blobmsg_add_sfp_module_statistics(struct blob_buf *buffer, struct sfp_module *module)
+{
+  sfp_update_module_statistics(module);
+  blobmsg_add_sfp_module_statistics_item(buffer, "temperature", &module->statistics.temperature);
+  blobmsg_add_sfp_module_statistics_item(buffer, "vcc", &module->statistics.vcc);
+  blobmsg_add_sfp_module_statistics_item(buffer, "tx_bias", &module->statistics.tx_bias);
+  blobmsg_add_sfp_module_statistics_item(buffer, "tx_power", &module->statistics.tx_power);
+  blobmsg_add_sfp_module_statistics_item(buffer, "rx_power", &module->statistics.rx_power);
 }
 
 static int ubus_get_modules(struct ubus_context *ctx, struct ubus_object *obj,
@@ -101,6 +123,8 @@ static int ubus_get_modules(struct ubus_context *ctx, struct ubus_object *obj,
       blobmsg_add_sfp_module_info(&reply_buf, module);
     } else if (strcmp(method, "get_diagnostics") == 0) {
       blobmsg_add_sfp_module_diagnostics(&reply_buf, module);
+    } else if (strcmp(method, "get_statistics") == 0) {
+      blobmsg_add_sfp_module_statistics(&reply_buf, module);
     }
 
     blobmsg_close_table(&reply_buf, c);
@@ -113,6 +137,8 @@ static int ubus_get_modules(struct ubus_context *ctx, struct ubus_object *obj,
         blobmsg_add_sfp_module_info(&reply_buf, module);
       } else if (strcmp(method, "get_diagnostics") == 0) {
         blobmsg_add_sfp_module_diagnostics(&reply_buf, module);
+      } else if (strcmp(method, "get_statistics") == 0) {
+        blobmsg_add_sfp_module_statistics(&reply_buf, module);
       }
 
       blobmsg_close_table(&reply_buf, c);
@@ -156,6 +182,7 @@ static int ubus_get_vendor_specific_data(struct ubus_context *ctx, struct ubus_o
 static const struct ubus_method sfp_methods[] = {
   UBUS_METHOD("get_modules", ubus_get_modules, sfp_module_policy),
   UBUS_METHOD("get_diagnostics", ubus_get_modules, sfp_module_policy),
+  UBUS_METHOD("get_statistics", ubus_get_modules, sfp_module_policy),
   UBUS_METHOD("get_vendor_specific_data", ubus_get_vendor_specific_data, sfp_module_policy),
 };
 

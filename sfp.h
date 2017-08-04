@@ -22,6 +22,25 @@
 #include <libubox/avl.h>
 #include <uci.h>
 
+// SFP module autodiscovery interval (in milliseconds).
+#define SFP_AUTODISCOVERY_INTERVAL 10000
+// SFP module diagnostic update interval (in milliseconds).
+#define SFP_UPDATE_INTERVAL 100
+// SFP statistics window size (in number of samples).
+#define SFP_STATISTICS_BUFFER_SIZE 600
+
+struct sfp_statistics_item {
+  float sum;
+  float average;
+  float variance;
+  float maximum;
+  float minimum;
+
+  float buffer[SFP_STATISTICS_BUFFER_SIZE];
+  size_t samples;
+  size_t index;
+};
+
 struct sfp_diagnostics_item {
   float temperature;
   float vcc;
@@ -36,6 +55,14 @@ struct sfp_diagnostics {
   struct sfp_diagnostics_item error_lower;
   struct sfp_diagnostics_item warning_upper;
   struct sfp_diagnostics_item warning_lower;
+};
+
+struct sfp_statistics {
+  struct sfp_statistics_item temperature;
+  struct sfp_statistics_item vcc;
+  struct sfp_statistics_item tx_bias;
+  struct sfp_statistics_item tx_power;
+  struct sfp_statistics_item rx_power;
 };
 
 struct sfp_module {
@@ -53,13 +80,14 @@ struct sfp_module {
   size_t vendor_specific_length;
 
   struct sfp_diagnostics diagnostics;
+  struct sfp_statistics statistics;
 
   // Module registry AVL tree node.
   struct avl_node avl;
 };
 
 int sfp_init(struct uci_context *uci);
-int sfp_update_module_diagnostics(struct sfp_module *module);
+int sfp_update_module_statistics(struct sfp_module *module);
 struct avl_tree *sfp_get_modules();
 
 #endif
