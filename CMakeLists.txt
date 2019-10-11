@@ -9,12 +9,8 @@ include_directories(${ubus_include_dir})
 find_path(ubox_include_dir libubox/usock.h)
 include_directories(${ubox_include_dir})
 
-find_path(uci_include_dir uci.h)
-include_directories(${uci_include_dir})
-
 find_library(ubus_library NAMES ubus)
 find_library(ubox_library NAMES ubox)
-find_library(uci_library NAMES uci)
 
 set(SOURCES
 main.c
@@ -25,7 +21,6 @@ ubus.c
 set(LIBS
 ${ubox_library}
 ${ubus_library}
-${uci_library}
 )
 
 add_executable(sfp-driver ${SOURCES})

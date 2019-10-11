@@ -31,7 +31,6 @@
 #include <unistd.h>
 #include <math.h>
 
-#define SFP_I2C_PROBE_BUS_MAX 5
 #define SFP_I2C_INFO_ADDRESS 0x50
 #define SFP_I2C_DIAG_ADDRESS 0x51
 
@@ -68,6 +67,9 @@
 #define SFP_DIAG_WARNING_LO_OFFSET 6
 #define SFP_DIAG_WARNING_LO_STRIDE 8
 
+static int sfp_i2c_probe_bus_min = 0;
+static int sfp_i2c_probe_bus_max = 4;
+
 // An AVL tree containing all the registered SFP modules.
 static struct avl_tree module_registry;
 // Timer for periodic SFP module autodiscovery.
@@ -89,8 +91,11 @@ int i2c_open(const char *bus, int address);
 int i2c_close(int i2c_bus);
 int i2c_read_data(int i2c_bus, uint8_t *data, size_t size);
 
-int sfp_init(struct uci_context *uci)
+int sfp_init(const int bus_min, const int bus_max)
 {
+  sfp_i2c_probe_bus_min = bus_min;
+  sfp_i2c_probe_bus_max = bus_max;
+
   syslog(LOG_INFO, "Initializing SFP modules.");
 
   // Initialize the module registry.
@@ -114,7 +119,7 @@ struct avl_tree *sfp_get_modules()
 void sfp_module_autodiscovery(struct uloop_timeout *timeout)
 {
   // Attempt to autodiscover SFP modules on all I2C buses.
-  for (unsigned int bus = 0; bus < SFP_I2C_PROBE_BUS_MAX; bus++) {
+  for (unsigned int bus = sfp_i2c_probe_bus_min; bus <= sfp_i2c_probe_bus_max; bus++) {
     char bus_name[64];
     struct sfp_module *module;
     snprintf(bus_name, sizeof(bus_name), "/dev/i2c-%u", bus);
