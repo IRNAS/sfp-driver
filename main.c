@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <libubox/uloop.h>
 #include <libubus.h>
-#include <uci.h>
 #include <signal.h>
 #include <syslog.h>
 #include <sys/stat.h>
@@ -31,8 +30,6 @@
 
 // Global ubus connection context.
 static struct ubus_context *ubus;
-// Global UCI context.
-static struct uci_context *uci;
 
 int main(int argc, char **argv)
 {
@@ -40,9 +37,13 @@ int main(int argc, char **argv)
   const char *ubus_socket = NULL;
   int log_option = 0;
   int c;
+  int i2c_bus_min = 0;
+  int i2c_bus_max = 4;
 
-  while ((c = getopt(argc, argv, "s:")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:s:")) != -1) {
     switch (c) {
+      case 'm': i2c_bus_min = atoi(optarg); break;
+      case 'n': i2c_bus_max = atoi(optarg); break;
       case 's': ubus_socket = optarg; break;
       case 'f': log_option |= LOG_PERROR; break;
       default: break;
@@ -78,14 +79,7 @@ int main(int argc, char **argv)
 
   ubus_add_uloop(ubus);
 
-  // Initialize UCI context.
-  uci = uci_alloc_context();
-  if (!uci) {
-    syslog(LOG_ERR, "Failed to initialize UCI!");
-    return -1;
-  }
-
-  if (sfp_init(uci) != 0) {
+  if (sfp_init(i2c_bus_min, i2c_bus_max) != 0) {
     syslog(LOG_ERR, "Failed to initialize SFP!");
     return -1;
   }
@@ -98,7 +92,6 @@ int main(int argc, char **argv)
   // Enter the event loop and cleanup after it exits.
   uloop_run();
   ubus_free(ubus);
-  uci_free_context(uci);
   uloop_done();
 
   return 0;

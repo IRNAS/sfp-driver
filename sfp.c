@@ -31,7 +31,6 @@
 #include <unistd.h>
 #include <math.h>
 
-#define SFP_I2C_PROBE_BUS_MAX 5
 #define SFP_I2C_INFO_ADDRESS 0x50
 #define SFP_I2C_DIAG_ADDRESS 0x51
 
@@ -68,6 +67,9 @@
 #define SFP_DIAG_WARNING_LO_OFFSET 6
 #define SFP_DIAG_WARNING_LO_STRIDE 8
 
+static int sfp_i2c_probe_bus_min = 0;
+static int sfp_i2c_probe_bus_max = 4;
+
 // An AVL tree containing all the registered SFP modules.
 static struct avl_tree module_registry;
 // Timer for periodic SFP module autodiscovery.
@@ -79,6 +81,7 @@ void sfp_module_autodiscovery(struct uloop_timeout *timeout);
 void sfp_module_diagnostics(struct uloop_timeout *timeout);
 int sfp_init_module(const char *bus);
 void sfp_free_module(struct sfp_module *module);
+void sfp_free_module_record(struct sfp_module *module);
 int sfp_update_module_diagnostics(struct sfp_module *module);
 int sfp_update_module_diagnostics_item(struct sfp_diagnostics_item *item, uint8_t *buffer, size_t stride);
 void sfp_update_module_statistics_item(struct sfp_statistics_item *item, float value);
@@ -89,8 +92,11 @@ int i2c_open(const char *bus, int address);
 int i2c_close(int i2c_bus);
 int i2c_read_data(int i2c_bus, uint8_t *data, size_t size);
 
-int sfp_init(struct uci_context *uci)
+int sfp_init(const int bus_min, const int bus_max)
 {
+  sfp_i2c_probe_bus_min = bus_min;
+  sfp_i2c_probe_bus_max = bus_max;
+
   syslog(LOG_INFO, "Initializing SFP modules.");
 
   // Initialize the module registry.
@@ -114,7 +120,7 @@ struct avl_tree *sfp_get_modules()
 void sfp_module_autodiscovery(struct uloop_timeout *timeout)
 {
   // Attempt to autodiscover SFP modules on all I2C buses.
-  for (unsigned int bus = 0; bus < SFP_I2C_PROBE_BUS_MAX; bus++) {
+  for (unsigned int bus = sfp_i2c_probe_bus_min; bus <= sfp_i2c_probe_bus_max; bus++) {
     char bus_name[64];
     struct sfp_module *module;
     snprintf(bus_name, sizeof(bus_name), "/dev/i2c-%u", bus);
@@ -136,11 +142,18 @@ void sfp_module_autodiscovery(struct uloop_timeout *timeout)
   uloop_timeout_set(timeout, SFP_AUTODISCOVERY_INTERVAL);
 }
 
+void sfp_free_module_record(struct sfp_module *module)
+{
+  avl_delete(&module_registry, &module->avl);
+  sfp_free_module(module);
+}
+
 void sfp_module_diagnostics(struct uloop_timeout *timeout)
 {
-  struct sfp_module *module;
-  avl_for_each_element(&module_registry, module, avl) {
-    sfp_update_module_diagnostics(module);
+  struct sfp_module *module, *tmp;
+  avl_for_each_element_safe(&module_registry, module, avl, tmp) {
+    if(sfp_update_module_diagnostics(module) < 0)
+      sfp_free_module_record(module);
   }
 
   uloop_timeout_set(timeout, SFP_UPDATE_INTERVAL);
@@ -160,6 +173,8 @@ int sfp_init_module(const char *bus)
     return -1;
   }
 
+  i2c_close(i2c_bus);
+
   // Verify checksum.
   uint8_t checksum = 0;
   for (size_t i = 0; i < SFP_CHECKSUM_OFFSET; i++) {
@@ -167,7 +182,6 @@ int sfp_init_module(const char *bus)
   }
 
   if (checksum != buffer[SFP_CHECKSUM_OFFSET]) {
-    i2c_close(i2c_bus);
     return -1;
   }
 
@@ -189,10 +203,8 @@ int sfp_init_module(const char *bus)
   module->avl.key = module->serial_number;
   if (avl_insert(&module_registry, &module->avl) != 0) {
     sfp_free_module(module);
-    result = -1;
+    return -1;
   }
-
-  i2c_close(i2c_bus);
 
   // Output some information about the newly discovered SFP module.
   syslog(LOG_INFO, "Discovered new SFP module on bus '%s':", bus);

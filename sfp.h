@@ -20,12 +20,12 @@
 #define SFP_DRIVER_SFP_H
 
 #include <libubox/avl.h>
-#include <uci.h>
+#include <stdint.h>
 
 // SFP module autodiscovery interval (in milliseconds).
 #define SFP_AUTODISCOVERY_INTERVAL 10000
 // SFP module diagnostic update interval (in milliseconds).
-#define SFP_UPDATE_INTERVAL 100
+#define SFP_UPDATE_INTERVAL 1000
 // SFP statistics window size (in number of samples).
 #define SFP_STATISTICS_BUFFER_SIZE 600
 
@@ -86,7 +86,7 @@ struct sfp_module {
   struct avl_node avl;
 };
 
-int sfp_init(struct uci_context *uci);
+int sfp_init(const int bus_min, const int bus_max);
 int sfp_update_module_statistics(struct sfp_module *module);
 struct avl_tree *sfp_get_modules();
 
