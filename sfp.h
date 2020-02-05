@@ -25,7 +25,7 @@
 // SFP module autodiscovery interval (in milliseconds).
 #define SFP_AUTODISCOVERY_INTERVAL 10000
 // SFP module diagnostic update interval (in milliseconds).
-#define SFP_UPDATE_INTERVAL 100
+#define SFP_UPDATE_INTERVAL 1000
 // SFP statistics window size (in number of samples).
 #define SFP_STATISTICS_BUFFER_SIZE 600
 
